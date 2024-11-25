@@ -31,23 +31,25 @@ ENV JAR_PROD=cinemaseats-0.0.1.jar
 # Copiar el script Python de sincronización
 COPY sync_seats_to_db.py /app/scripts/sync_seats_to_db.py
 
-# Instalar Python y dependencias
+# Instalar Python, cron y dependencias
 RUN apt-get update && apt-get install -y \
     cron \
     python3 \
     python3-pip && \
     pip3 install psycopg2-binary
 
-# Crear cron job para ejecutar el script periódicamente
-RUN echo "* * * * * python3 /app/scripts/sync_seats_to_db.py >> /var/log/cron_seats.log 2>&1" > cron_seats && crontab cron_seats
+# Crear cron job para sincronización cada minuto
+RUN echo "* * * * * python3 /app/scripts/sync_seats_to_db.py >> /var/log/cron_seats.log 2>&1" > /etc/cron.d/cron_sync && \
+    chmod 0644 /etc/cron.d/cron_sync && \
+    crontab /etc/cron.d/cron_sync
 
 # Exponer el puerto configurado en Spring Boot
 EXPOSE 8081
 
-# Usar un script de entrada para seleccionar el archivo .jar correcto según el ambiente
+# Usar un script de entrada para seleccionar el archivo .jar correcto según el ambiente y reiniciar cron
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # Comando de inicio del contenedor
-ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["sh", "-c", "service cron start && /app/entrypoint.sh"]
 
