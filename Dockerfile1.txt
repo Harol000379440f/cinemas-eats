@@ -42,7 +42,7 @@ RUN apt-get update && apt-get install -y \
 RUN echo "* * * * * python3 /app/scripts/sync_seats_to_db.py >> /var/log/cron_seats.log 2>&1" > cron_seats && crontab cron_seats
 
 # Exponer el puerto configurado en Spring Boot
-EXPOSE 8081
+EXPOSE 8080
 
 # Usar un script de entrada para seleccionar el archivo .jar correcto según el ambiente
 COPY entrypoint.sh /app/entrypoint.sh
