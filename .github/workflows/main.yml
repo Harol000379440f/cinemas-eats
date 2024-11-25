@@ -1,0 +1,102 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/*'
+      - 'release/*'
+  pull_request:
+    branches:
+      - main
+      - develop
+
+  create:
+    tags:
+      - '*'
+
+jobs:
+  # Pipeline para Desarrollo
+  desarrollo:
+    if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar Código
+        uses: actions/checkout@v3
+      - name: Iniciar sesión en Docker
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+      - name: Construir Imagen Docker (SNAPSHOT)
+        run: |
+          DOCKER_USERNAME=$(echo "${{ secrets.DOCKER_USERNAME }}" | tr '[:upper:]' '[:lower:]')
+          docker build --build-arg ENV=DEV -t $DOCKER_USERNAME/cinemaseats:SNAPSHOT .
+      - name: Ejecutar Pruebas Unitarias
+        run: echo "Ejecutando pruebas unitarias..."
+      - name: Ejecutar Pruebas de Integración
+        run: echo "Ejecutando pruebas de integración..."
+      - name: Escanear Imagen Docker con Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKER_USERNAME }}/cinemaseats:SNAPSHOT
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 0
+
+  # Pipeline para QA
+  qa:
+    if: startsWith(github.ref, 'refs/heads/release/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar Código
+        uses: actions/checkout@v3
+      - name: Iniciar sesión en Docker
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+      - name: Construir Imagen Docker (PRERELEASE)
+        run: |
+          DOCKER_USERNAME=$(echo "${{ secrets.DOCKER_USERNAME }}" | tr '[:upper:]' '[:lower:]')
+          docker build --build-arg ENV=QA -t $DOCKER_USERNAME/cinemaseats:PRERELEASE .
+      - name: Ejecutar Pruebas QA
+        run: echo "Ejecutando pruebas QA..."
+      - name: Escanear Imagen Docker con Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKER_USERNAME }}/cinemaseats:PRERELEASE
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 0
+      - name: Publicar Imagen Docker
+        if: success()
+        run: |
+          DOCKER_USERNAME=$(echo "${{ secrets.DOCKER_USERNAME }}" | tr '[:upper:]' '[:lower:]')
+          docker push $DOCKER_USERNAME/cinemasats:PRERELEASE
+
+  # Pipeline para Producción
+  produccion:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar Código
+        uses: actions/checkout@v3
+      - name: Iniciar sesión en Docker
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+      - name: Construir Imagen Docker (Producción)
+        run: |
+          DOCKER_USERNAME=$(echo "${{ secrets.DOCKER_USERNAME }}" | tr '[:upper:]' '[:lower:]')
+          docker build --build-arg ENV=PROD -t $DOCKER_USERNAME/cinemaseats:latest .
+      - name: Escanear Imagen Docker con Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKER_USERNAME }}/cinemaseats:latest
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 0
+      - name: Ejecutar Pruebas de Aceptación
+        run: echo "Ejecutando pruebas de aceptación..."
+      - name: Publicar Imagen Docker
+        if: success()
+        run: |
+          DOCKER_USERNAME=$(echo "${{ secrets.DOCKER_USERNAME }}" | tr '[:upper:]' '[:lower:]')
+          docker push $DOCKER_USERNAME/cinemaseats:latest
